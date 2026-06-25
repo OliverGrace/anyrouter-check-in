@@ -1,0 +1,53 @@
+name: Sync upstream
+
+on:
+  schedule:
+    # GitHub Actions uses UTC. This runs daily at 03:00 Beijing time.
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync from upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          cp .github/workflows/sync-upstream.yml /tmp/sync-upstream.yml
+
+          git remote add upstream https://github.com/millylee/anyrouter-check-in.git
+          git fetch upstream
+
+          git checkout main
+          git reset --hard upstream/main
+
+          mkdir -p .github/workflows
+          cp /tmp/sync-upstream.yml .github/workflows/sync-upstream.yml
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          readme = Path("README.md")
+          content = readme.read_text(encoding="utf-8")
+          content = re.sub(
+              r"https://anyrouter\.top/register\?aff=[A-Za-z0-9_-]+",
+              "https://anyrouter.top/register?aff=409F",
+              content,
+          )
+          readme.write_text(content, encoding="utf-8")
+          PY
+
+          git add README.md .github/workflows/sync-upstream.yml
+          git commit -m "chore: apply fork customizations" || true
+          git push origin main --force-with-lease
